@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timezone
 import time
 import urllib.parse
+import textwrap
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Market Monitor", initial_sidebar_state="expanded")
@@ -72,7 +73,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = ["RELIANCE", "TCS", "INFY", "BSE", "CDSL", "TMCV"]
+    st.session_state.watchlist = ["RELIANCE", "TCS", "INFY", "BSE", "CDSL", "TMCV", "ZOMATO"]
 if 'active_ticker' not in st.session_state:
     st.session_state.active_ticker = "RELIANCE"
 
@@ -106,10 +107,8 @@ def get_market_indices():
     """Fetches Live NIFTY 50 and NIFTY BANK"""
     try:
         tickers = yf.Tickers("^NSEI ^NSEBANK")
-        # NIFTY 50
         n50 = tickers.tickers['^NSEI'].fast_info
         n50_obj = {"price": n50.last_price, "change": n50.last_price - n50.previous_close, "pct": (n50.last_price - n50.previous_close)/n50.previous_close*100}
-        # NIFTY BANK
         nb = tickers.tickers['^NSEBANK'].fast_info
         nb_obj = {"price": nb.last_price, "change": nb.last_price - nb.previous_close, "pct": (nb.last_price - nb.previous_close)/nb.previous_close*100}
         return n50_obj, nb_obj
@@ -136,8 +135,11 @@ def get_quant_analysis(ticker):
         if df.empty: return None
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         df = df.dropna()
+        
+        # --- FIX FOR VWAP ERROR: Force Sort Index ---
+        df = df.sort_index()
 
-        # 2. Sector Data
+        # Sector Data
         sector_symbol = get_sector_map(ticker)
         try:
             sector_df = yf.download(sector_symbol, period="1d", interval="1d", progress=False)
@@ -294,53 +296,53 @@ with st.sidebar:
 active = st.session_state.active_ticker
 if not active: st.stop()
 
-# --- 5. STICKY HEADER (MARKET + STOCK) ---
+# --- 5. STICKY HEADER ---
 @st.fragment(run_every=10)
 def sticky_header_zone():
     data = get_quant_analysis(active)
     n50, nbank = get_market_indices()
     
     if data:
-        # 1. Market HTML (One long string to prevent indentation errors)
+        # Market Ticker HTML
         market_html = ""
         if n50 and nbank:
-            n50_c = "#2ea043" if n50['change'] >= 0 else "#da3633"
-            nb_c = "#2ea043" if nbank['change'] >= 0 else "#da3633"
+            n50_c = "#2ea043" if n50['change'] >=0 else "#da3633"
+            nb_c = "#2ea043" if nbank['change'] >=0 else "#da3633"
             market_html = f'<div class="market-ticker"><div class="index-item"><span class="index-name">NIFTY 50</span><span class="index-val" style="color:{n50_c};">{n50["price"]:,.0f} ({n50["pct"]:+.2f}%)</span></div><div class="index-item"><span class="index-name">NIFTY BANK</span><span class="index-val" style="color:{nb_c};">{nbank["price"]:,.0f} ({nbank["pct"]:+.2f}%)</span></div></div>'
 
-        # 2. Stock Data Colors
+        # Colors
         p_color = '#2ea043' if data['change'] >= 0 else '#da3633'
         s_color = '#2ea043' if 'BUY' in data['signal'] else '#da3633' if 'SELL' in data['signal'] else '#d29922'
 
-        # 3. Main Header HTML (Flattened to ensure proper rendering)
-        header_html = f"""
-<div class="sticky-header">
-    {market_html}
-    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-        <div>
-            <div class="stock-title">{active}</div>
-            <div class="stock-sub">NSE • Sector-Aware Quant • {datetime.now().strftime('%H:%M:%S')}</div>
-        </div>
-        <div style="text-align: right;">
-            <div style="font-size: 12px; color: #8b949e;">LTP</div>
-            <div style="font-size: 24px; color: {p_color}; font-weight: bold;">₹{data['price']:.2f}</div>
-            <div style="font-size: 14px; color: {p_color};">{data['change']:.2f} ({data['pct']:.2f}%)</div>
-        </div>
-        <div style="text-align: right;">
-            <div style="font-size: 12px; color: #8b949e;">SIGNAL</div>
-            <div style="font-size: 18px; color: {s_color}; font-weight: bold;">{data['signal']}</div>
-        </div>
-        <div style="text-align: right;">
-            <div style="font-size: 12px; color: #8b949e;">VWAP</div>
-            <div style="font-size: 18px; color: #58a6ff;">₹{data['vwap']:.2f}</div>
-        </div>
-        <div style="text-align: right;">
-            <div style="font-size: 12px; color: #8b949e;">STOP LOSS</div>
-            <div style="font-size: 18px; color: #e6edf3;">₹{data['stop_loss']:.2f}</div>
-        </div>
-    </div>
-</div>
-"""
+        # Flattened HTML
+        header_html = textwrap.dedent(f"""
+            <div class="sticky-header">
+                {market_html}
+                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <div class="stock-title">{active}</div>
+                        <div class="stock-sub">NSE • Sector-Aware Quant • {datetime.now().strftime('%H:%M:%S')}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 12px; color: #8b949e;">LTP</div>
+                        <div style="font-size: 24px; color: {p_color}; font-weight: bold;">₹{data['price']:.2f}</div>
+                        <div style="font-size: 14px; color: {p_color};">{data['change']:.2f} ({data['pct']:.2f}%)</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 12px; color: #8b949e;">SIGNAL</div>
+                        <div style="font-size: 18px; color: {s_color}; font-weight: bold;">{data['signal']}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 12px; color: #8b949e;">VWAP</div>
+                        <div style="font-size: 18px; color: #58a6ff;">₹{data['vwap']:.2f}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 12px; color: #8b949e;">STOP LOSS</div>
+                        <div style="font-size: 18px; color: #e6edf3;">₹{data['stop_loss']:.2f}</div>
+                    </div>
+                </div>
+            </div>
+        """)
         st.markdown(header_html, unsafe_allow_html=True)
 
 sticky_header_zone()
@@ -355,34 +357,33 @@ with col_chart:
         json_data = json.dumps(chart_json)
         chart_id = f"chart_{active}"
         
-        # Flattened HTML for Chart
-        chart_html = f"""
-<div style="position: relative; width: 100%; height: 600px;">
-    <div id="{chart_id}" style="width: 100%; height: 100%; background-color: #0e1117;"></div>
-    <button onclick="resetToLive()" style="position: absolute; bottom: 30px; right: 80px; z-index: 10; background-color: #2962ff; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">📍 LIVE</button>
-</div>
-<script src="https://unpkg.com/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js"></script>
-<script>
-    (function() {{
-        const container = document.getElementById('{chart_id}');
-        const chart = LightweightCharts.createChart(container, {{
-            layout: {{ textColor: '#d1d4dc', background: {{ type: 'solid', color: '#0e1117' }} }},
-            grid: {{ vertLines: {{ color: 'rgba(42, 46, 57, 0.4)' }}, horzLines: {{ color: 'rgba(42, 46, 57, 0.4)' }} }},
-            timeScale: {{ timeVisible: true, secondsVisible: false, borderColor: '#2B2B43' }},
-            rightPriceScale: {{ borderColor: '#2B2B43' }},
-        }});
-        const candleSeries = chart.addCandlestickSeries({{ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' }});
-        candleSeries.setData({json_data});
-        new ResizeObserver(entries => {{
-            if (entries.length === 0) return;
-            const newRect = entries[0].contentRect;
-            chart.applyOptions({{ width: newRect.width, height: newRect.height }});
-        }}).observe(container);
-        window.resetToLive = function() {{ chart.timeScale().scrollToRealTime(); }};
-    }})();
-</script>
-"""
-        components.html(chart_html, height=600)
+        html_code = textwrap.dedent(f"""
+        <div style="position: relative; width: 100%; height: 600px;">
+            <div id="{chart_id}" style="width: 100%; height: 100%; background-color: #0e1117;"></div>
+            <button onclick="resetToLive()" style="position: absolute; bottom: 30px; right: 80px; z-index: 10; background-color: #2962ff; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">📍 LIVE</button>
+        </div>
+        <script src="https://unpkg.com/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js"></script>
+        <script>
+            (function() {{
+                const container = document.getElementById('{chart_id}');
+                const chart = LightweightCharts.createChart(container, {{
+                    layout: {{ textColor: '#d1d4dc', background: {{ type: 'solid', color: '#0e1117' }} }},
+                    grid: {{ vertLines: {{ color: 'rgba(42, 46, 57, 0.4)' }}, horzLines: {{ color: 'rgba(42, 46, 57, 0.4)' }} }},
+                    timeScale: {{ timeVisible: true, secondsVisible: false, borderColor: '#2B2B43' }},
+                    rightPriceScale: {{ borderColor: '#2B2B43' }},
+                }});
+                const candleSeries = chart.addCandlestickSeries({{ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' }});
+                candleSeries.setData({json_data});
+                new ResizeObserver(entries => {{
+                    if (entries.length === 0) return;
+                    const newRect = entries[0].contentRect;
+                    chart.applyOptions({{ width: newRect.width, height: newRect.height }});
+                }}).observe(container);
+                window.resetToLive = function() {{ chart.timeScale().scrollToRealTime(); }};
+            }})();
+        </script>
+        """)
+        components.html(html_code, height=600)
 
 # RIGHT: LIVE INTEL
 with col_intel:
@@ -390,21 +391,20 @@ with col_intel:
     def live_intel_zone():
         data = get_quant_analysis(active)
         if data:
-            c_score = "score-badge" if data['score'] > 60 else "score-badge-red" if data['score'] < 40 else "score-badge-yellow"
+            color = "score-badge" if data['score'] > 60 else "score-badge-red" if data['score'] < 40 else "score-badge-yellow"
             
-            # Flattened Report HTML
-            report_html = f"""
-<div class="report-box">
-    <div style="margin-bottom:8px; font-size:14px;">
-        <b>QUANT SCORE:</b> <span class="{c_score}">{data['score']}/100</span>
-    </div>
-    <div style="height: 250px; overflow-y: auto; padding-right: 5px;">
-        <ul class="report-list">
-            {''.join([f'<li class="report-item">{r}</li>' for r in data['reasons']])}
-        </ul>
-    </div>
-</div>
-"""
+            report_html = textwrap.dedent(f"""
+            <div class="report-box">
+                <div style="margin-bottom:8px; font-size:14px;">
+                    <b>QUANT SCORE:</b> <span class="{color}">{data['score']}/100</span>
+                </div>
+                <div style="height: 250px; overflow-y: auto; padding-right: 5px;">
+                    <ul class="report-list">
+                        {''.join([f'<li class="report-item">{r}</li>' for r in data['reasons']])}
+                    </ul>
+                </div>
+            </div>
+            """)
             st.markdown(report_html, unsafe_allow_html=True)
 
             st.caption(f"🟢 Live News")
@@ -426,5 +426,4 @@ with col_intel:
                         <div class="news-time">{item['time_str']} • {item['source']}</div>
                         <a href="{item['link']}" target="_blank" class="news-title">{item['title']}</a>
                     </div>""", unsafe_allow_html=True)
-
     live_intel_zone()
