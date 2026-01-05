@@ -72,7 +72,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = ["RELIANCE", "TCS", "INFY", "BSE", "CDSL", "TMCV", "ZOMATO"]
+    st.session_state.watchlist = ["RELIANCE", "TCS", "INFY", "BSE", "CDSL", "TMCV"]
 if 'active_ticker' not in st.session_state:
     st.session_state.active_ticker = "RELIANCE"
 
@@ -426,4 +426,5 @@ with col_intel:
                         <div class="news-time">{item['time_str']} • {item['source']}</div>
                         <a href="{item['link']}" target="_blank" class="news-title">{item['title']}</a>
                     </div>""", unsafe_allow_html=True)
+
     live_intel_zone()
